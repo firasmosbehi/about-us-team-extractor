@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Page Test Patterns</title>
+    <style>
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        .card { border: 1px solid #ccc; padding: 10px; }
+        .flex-row { display: flex; gap: 20px; }
+        .list-item { margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <h1>Our Team</h1>
+
+    <!-- Pattern 1: Classic Cards (Grid) -->
+    <section>
+        <h2>Executive Team (Grid Pattern)</h2>
+        <div class="grid">
+            <div class="card">
+                <h3>Alice Johnson</h3>
+                <p class="role">Chief Executive Officer</p>
+                <a href="mailto:alice@example.com">Email Alice</a>
+            </div>
+            <div class="card">
+                <h3>Bob Smith</h3>
+                <p class="role">CTO</p>
+                <a href="mailto:bob@example.com">Email Bob</a>
+            </div>
+            <div class="card">
+                <h3>Charlie Brown</h3>
+                <span class="role">VP of Sales</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pattern 2: List with definitions -->
+    <section>
+        <h2>Board of Directors (List Pattern)</h2>
+        <ul>
+            <li class="list-item">
+                <strong>David Lee</strong> - <em>Chairman</em>
+            </li>
+            <li class="list-item">
+                <strong>Eva Green</strong> - <em>Director</em>
+            </li>
+            <li class="list-item">
+                <strong>Frank White</strong> - <em>Advisor</em>
+            </li>
+        </ul>
+    </section>
+
+    <!-- Pattern 3: Table Layout (Legacy) -->
+    <section>
+        <h2>Advisors (Table Pattern)</h2>
+        <table>
+            <tr>
+                <td>Grace Hopper</td>
+                <td>Head of Computer Science</td>
+            </tr>
+            <tr>
+                <td>Ada Lovelace</td>
+                <td>First Programmer</td>
+            </tr>
+        </table>
+    </section>
+
+    <!-- Pattern 4: Nested Divs without specific classes -->
+    <section>
+        <h2>Engineering (Generic Divs)</h2>
+        <div>
+            <div>
+                <h4>Henry Ford</h4>
+                <div>Lead Engineer</div>
+            </div>
+            <div>
+                <h4>Ivy Thomas</h4>
+                <div>Senior Developer</div>
+            </div>
+            <div>
+                <h4>Jack Daniels</h4>
+                <div>DevOps Engineer</div>
+            </div>
+        </div>
+    </section>
+
+</body>
+</html>

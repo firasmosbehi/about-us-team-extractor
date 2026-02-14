@@ -58,6 +58,9 @@ export function parsePeopleFromLlmOutput(raw) {
     const email = emailRaw && EMAIL_VALIDATE_REGEX.test(emailRaw) ? emailRaw : null;
 
     const linkedinUrl = typeof p.linkedinUrl === 'string' ? p.linkedinUrl.trim() : null;
+    const twitterUrl = typeof p.twitterUrl === 'string' ? p.twitterUrl.trim() : null;
+    const githubUrl = typeof p.githubUrl === 'string' ? p.githubUrl.trim() : null;
+    const blueskyUrl = typeof p.blueskyUrl === 'string' ? p.blueskyUrl.trim() : null;
     const profileUrl = typeof p.profileUrl === 'string' ? p.profileUrl.trim() : null;
 
     const key = `${name.toLowerCase()}|${(title || '').toLowerCase()}|${email || ''}`;
@@ -69,6 +72,9 @@ export function parsePeopleFromLlmOutput(raw) {
       title: title || null,
       email,
       linkedinUrl: linkedinUrl || null,
+      twitterUrl: twitterUrl || null,
+      githubUrl: githubUrl || null,
+      blueskyUrl: blueskyUrl || null,
       profileUrl: profileUrl || null,
       source: 'llm'
     });
@@ -89,14 +95,33 @@ export async function extractPeopleWithOpenAI({
   const key = String(apiKey || '').trim();
   if (!key) throw new Error('Missing OpenAI API key');
 
-  const promptHtml = truncate(html, Math.floor(maxChars * 0.7));
+  // Simple HTML cleaner to save tokens
+  const cleanHtmlForLlm = (rawHtml) => {
+    let s = String(rawHtml || '');
+    // Remove scripts, styles, svg, comments
+    s = s.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+    s = s.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
+    s = s.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
+    s = s.replace(/<!--[\s\S]*?-->/g, '');
+    
+    // Remove specific attributes to save space, keep href/src/alt/title/aria-label if possible?
+    // Aggressive: remove all attributes except href
+    // We can do a simpler pass: remove class="...", style="...", id="..."
+    s = s.replace(/\s+(class|style|id|data-[\w-]+|aria-[\w-]+)=["'][^"']*["']/gi, '');
+    
+    // Collapse whitespace
+    s = s.replace(/\s+/g, ' ').trim();
+    return s;
+  };
+
+  const promptHtml = truncate(cleanHtmlForLlm(html), Math.floor(maxChars * 0.7));
   const promptText = truncate(text, Math.floor(maxChars * 0.3));
 
   const messages = [
     {
       role: 'system',
       content:
-        'You extract structured data from web pages. Return only valid JSON, no commentary, no markdown.'
+        'You extract structured data from web pages. Return only valid JSON, no commentary, no markdown. Focus on finding Team Members, Employees, and Leadership.'
     },
     {
       role: 'user',
@@ -104,12 +129,19 @@ export async function extractPeopleWithOpenAI({
         `URL: ${url}`,
         '',
         'Task: Extract a JSON array of people listed on this page.',
+        'Strict Rules:',
+        '1. Only extract real humans (names like "John Doe"). usage: "Support", "Admin", "Sales Team" -> IGNORE.',
+        '2. Do not extract testimonials or clients, only internal team members.',
+        '',
         'Each array item must be an object with keys:',
         '- name (string, required)',
         '- title (string, optional)',
-        '- email (string, optional; only if explicitly present on the page)',
-        '- linkedinUrl (string, optional; only if explicitly present on the page)',
-        '- profileUrl (string, optional; only if explicitly present on the page)',
+        '- email (string, optional, explicit only)',
+        '- linkedinUrl (string, optional, explicit only)',
+        '- twitterUrl (string, optional, explicit only)',
+        '- githubUrl (string, optional, explicit only)',
+        '- blueskyUrl (string, optional, explicit only)',
+        '- profileUrl (string, optional, explicit only)',
         '',
         'Return [] if no people are listed.',
         '',
@@ -137,7 +169,7 @@ export async function extractPeopleWithOpenAI({
         model,
         messages,
         temperature: 0,
-        max_tokens: 800
+        max_tokens: 1000
       })
     });
 

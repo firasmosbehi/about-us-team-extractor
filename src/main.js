@@ -9,6 +9,7 @@ import {
   extractPeopleFromCards,
   extractPeopleFromJsonLdStrings
 } from './lib/extract.js';
+import { extractPeopleFromGenericPatterns } from './lib/extract_generic.js';
 import { buildFallbackCandidates, rankAboutPageCandidates, rankTeamPageCandidates } from './lib/navigation.js';
 import { collectAnchors, mergeAnchors, tryExpandNavigation } from './lib/browser.js';
 import { extractPeopleWithOpenAI } from './lib/llm.js';
@@ -42,6 +43,9 @@ function mergePeopleByNameTitle(people) {
     if (!prev.email && p.email) prev.email = p.email;
     if (!prev.profileUrl && p.profileUrl) prev.profileUrl = p.profileUrl;
     if (!prev.linkedinUrl && p.linkedinUrl) prev.linkedinUrl = p.linkedinUrl;
+    if (!prev.twitterUrl && p.twitterUrl) prev.twitterUrl = p.twitterUrl;
+    if (!prev.githubUrl && p.githubUrl) prev.githubUrl = p.githubUrl;
+    if (!prev.blueskyUrl && p.blueskyUrl) prev.blueskyUrl = p.blueskyUrl;
     // Keep both source hints.
     if (prev.source && p.source && prev.source !== p.source) prev.source = `${prev.source},${p.source}`;
   }
@@ -309,7 +313,8 @@ const crawler = new PlaywrightCrawler({
 
       const people = mergePeopleByNameTitle([
         ...extractPeopleFromJsonLdStrings(jsonLdStrings),
-        ...(await extractPeopleFromCards(page))
+        ...(await extractPeopleFromCards(page)),
+        ...(await extractPeopleFromGenericPatterns(page))
       ]).filter((p) => shouldIncludeByRole(p.title, roleIncludeKeywords));
 
       if (people.length > 0) {
@@ -459,7 +464,8 @@ const crawler = new PlaywrightCrawler({
 
       let people = mergePeopleByNameTitle([
         ...extractPeopleFromJsonLdStrings(jsonLdStrings),
-        ...(await extractPeopleFromCards(page))
+        ...(await extractPeopleFromCards(page)),
+        ...(await extractPeopleFromGenericPatterns(page))
       ]).filter((p) => shouldIncludeByRole(p.title, roleIncludeKeywords));
 
       if (people.length === 0 && llmEnabled) {

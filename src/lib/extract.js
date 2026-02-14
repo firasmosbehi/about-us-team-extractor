@@ -21,20 +21,54 @@ function normalizeUrl(url) {
   }
 }
 
-function pickLinkedinUrl(urls) {
+export function extractSocialUrls(urls) {
+  const out = {
+    linkedin: null,
+    twitter: null,
+    github: null,
+    bluesky: null
+  };
+
   for (const u of urls || []) {
     const url = String(u || '').trim();
     if (!url) continue;
     const lower = url.toLowerCase();
-    if (lower.includes('linkedin.com/in/')) return url;
+    
+    // LinkedIn
+    if (lower.includes('linkedin.com/in/') || lower.includes('linkedin.com/profile')) {
+       if (!out.linkedin) out.linkedin = url;
+    } else if (lower.includes('linkedin.com/') && !out.linkedin) {
+       // weak match, keep if nothing better
+       out.linkedin = url;
+    }
+
+    // Twitter / X
+    if (lower.includes('twitter.com/') || lower.includes('x.com/')) {
+        if (!['/intent/', '/share', '/home', '/search'].some(bad => lower.includes(bad))) {
+             out.twitter = url;
+        }
+    }
+
+    // GitHub
+    if (lower.includes('github.com/')) {
+        if (!['/topics', '/search', '/pricing', '/features'].some(bad => lower.includes(bad))) {
+            out.github = url;
+        }
+    }
+
+    // Bluesky
+    if (lower.includes('bsky.app/profile/')) {
+        out.bluesky = url;
+    }
   }
-  for (const u of urls || []) {
-    const url = String(u || '').trim();
-    if (!url) continue;
-    const lower = url.toLowerCase();
-    if (lower.includes('linkedin.com/')) return url;
-  }
-  return null;
+  return out;
+}
+
+
+
+export function pickLinkedinUrl(urls) {
+   // Legacy wrapper for compatibility if needed, but we should switch to extractSocialUrls
+   return extractSocialUrls(urls).linkedin;
 }
 
 export function extractEmailsFromStrings(strings) {
@@ -160,7 +194,8 @@ function walkJsonLd(node, results) {
       .filter((u) => typeof u === 'string')
       .map(normalizeUrl)
       .filter(Boolean);
-    const linkedinUrl = pickLinkedinUrl([url, ...sameAsUrls]);
+    
+    const socials = extractSocialUrls([url, ...sameAsUrls]);
 
     if (name) {
       results.push({
@@ -168,7 +203,10 @@ function walkJsonLd(node, results) {
         title: title || null,
         email: email || null,
         profileUrl: url || null,
-        linkedinUrl: linkedinUrl || null,
+        linkedinUrl: socials.linkedin || null,
+        twitterUrl: socials.twitter || null,
+        githubUrl: socials.github || null,
+        blueskyUrl: socials.bluesky || null,
         source: 'jsonld'
       });
     }
@@ -200,6 +238,10 @@ export function dedupePeople(people) {
     const email = typeof p?.email === 'string' ? normalizeEmail(p.email) : '';
     const profileUrl = typeof p?.profileUrl === 'string' ? p.profileUrl.trim() : '';
     const linkedinUrl = typeof p?.linkedinUrl === 'string' ? p.linkedinUrl.trim() : '';
+    const twitterUrl = typeof p?.twitterUrl === 'string' ? p.twitterUrl.trim() : '';
+    const githubUrl = typeof p?.githubUrl === 'string' ? p.githubUrl.trim() : '';
+    const blueskyUrl = typeof p?.blueskyUrl === 'string' ? p.blueskyUrl.trim() : '';
+    
     if (!name) continue;
 
     const key = `${name.toLowerCase()}|${title.toLowerCase()}|${email}`;
@@ -211,6 +253,9 @@ export function dedupePeople(people) {
       email: email || null,
       profileUrl: profileUrl || null,
       linkedinUrl: linkedinUrl || null,
+      twitterUrl: twitterUrl || null,
+      githubUrl: githubUrl || null,
+      blueskyUrl: blueskyUrl || null,
       source: p.source || null
     });
   }
@@ -251,14 +296,14 @@ export async function extractPeopleFromCards(page) {
 
       const BLOCKLIST = ['privacy', 'terms', 'cookie', 'legal', 'careers', 'jobs'];
 
-      const clean = (s) => String(s || '').replace(/\\s+/g, ' ').trim();
+      const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 
       const looksLikeName = (s) => {
         const v = clean(s);
         if (!v) return false;
         if (v.length < 3 || v.length > 80) return false;
         if (v.includes('@')) return false;
-        if (/\\d/.test(v)) return false;
+        if (/\d/.test(v)) return false;
 
         const lower = v.toLowerCase();
         if (BLOCKLIST.some((b) => lower.includes(b))) return false;
@@ -327,17 +372,18 @@ export async function extractPeopleFromCards(page) {
           if (!el || seenEls.has(el)) continue;
           seenEls.add(el);
 
-          const text = clean(el.innerText);
-          if (!text) continue;
+          const rawText = String(el.innerText || '');
+          if (!rawText.trim()) continue;
 
           // Prefer small-ish blocks (cards), skip long bios.
-          if (text.length > 800) continue;
+          if (rawText.length > 1000) continue;
 
-          const lines = text
-            .split('\\n')
+          const lines = rawText
+            .split('\n')
             .map(clean)
             .filter(Boolean)
             .slice(0, 12);
+          
           if (lines.length < 2) continue;
 
           let name = null;
@@ -388,7 +434,25 @@ export async function extractPeopleFromCards(page) {
             })
             .filter(Boolean);
 
-          const linkedinUrl = urls.find((u) => String(u).toLowerCase().includes('linkedin.com/')) || null;
+
+
+          // We can't use the external helper function here inside evaluate easily without injection or duplication.
+          // Let's implement a simple version inside.
+          const findSocials = (urlList) => {
+             const res = { linkedin: null, twitter: null, github: null, bluesky: null };
+             for (const u of urlList) {
+                 const l = String(u).toLowerCase();
+                 if (l.includes('linkedin.com/')) {
+                     if (!res.linkedin || l.includes('/in/')) res.linkedin = u;
+                 }
+                 if ((l.includes('twitter.com/') || l.includes('x.com/')) && !res.twitter && !l.includes('/share')) res.twitter = u;
+                 if (l.includes('github.com/') && !res.github) res.github = u;
+                 if (l.includes('bsky.app/') && !res.bluesky) res.bluesky = u;
+             }
+             return res;
+          };
+          
+          const socials = findSocials(urls);
 
           let profileUrl = null;
           for (const u of urls) {
@@ -412,7 +476,10 @@ export async function extractPeopleFromCards(page) {
             title: title || null,
             email: email || null,
             profileUrl,
-            linkedinUrl,
+            linkedinUrl: socials.linkedin,
+            twitterUrl: socials.twitter,
+            githubUrl: socials.github,
+            blueskyUrl: socials.bluesky,
             source: 'cards'
           });
         }
