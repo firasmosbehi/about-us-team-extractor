@@ -1,0 +1,61 @@
+{
+  "title": "About Us Team Extractor",
+  "description": "Find a company website's About/Team/Leadership page and extract names, job titles, and emails.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "startUrls": {
+      "title": "Company websites",
+      "type": "array",
+      "description": "List of company homepages or domains to process.",
+      "editor": "requestListSources",
+      "prefill": [{ "url": "https://example.com" }]
+    },
+    "maxCompanies": {
+      "title": "Max companies",
+      "type": "integer",
+      "description": "Hard limit for how many input websites will be processed.",
+      "default": 100,
+      "minimum": 1
+    },
+    "maxTeamPageCandidates": {
+      "title": "Max team page candidates",
+      "type": "integer",
+      "description": "How many About/Team/Leadership page candidates to try per company (from homepage links and common paths).",
+      "default": 3,
+      "minimum": 1,
+      "maximum": 10
+    },
+    "roleIncludeKeywords": {
+      "title": "Role include keywords",
+      "type": "array",
+      "description": "If set, only output people whose title contains at least one keyword (case-insensitive). Example: [\"Founder\", \"CEO\"].",
+      "editor": "stringList",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "maxConcurrency": {
+      "title": "Max concurrency",
+      "type": "integer",
+      "description": "How many pages to process in parallel.",
+      "default": 5,
+      "minimum": 1,
+      "maximum": 50
+    },
+    "proxyConfiguration": {
+      "title": "Proxy configuration",
+      "type": "object",
+      "description": "Apify Proxy configuration (recommended for reliability).",
+      "editor": "proxy"
+    },
+    "debugLog": {
+      "title": "Debug logging",
+      "type": "boolean",
+      "description": "Enable more verbose logs.",
+      "default": false
+    }
+  },
+  "required": ["startUrls"]
+}

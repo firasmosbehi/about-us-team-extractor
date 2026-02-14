@@ -1,0 +1,8 @@
+{
+	"actorSpecification": 1,
+	"name": "about-us-team-extractor",
+	"version": "0.1",
+	"buildTag": "latest",
+	"input": "./INPUT_SCHEMA.json",
+	"environmentVariables": {}
+}

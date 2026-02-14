@@ -1,0 +1,17 @@
+storage
+node_modules
+.venv
+.DS_Store
+.env
+.env.*
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist
+build
+coverage
+.cache
+.apify
+playwright-report
+test-results

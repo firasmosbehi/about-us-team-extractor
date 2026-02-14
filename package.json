@@ -1,0 +1,29 @@
+{
+  "name": "about-us-team-extractor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Apify Actor that finds About/Team pages and extracts employee names, titles, and emails.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test",
+    "lint": "eslint .",
+    "format": "prettier -w .",
+    "format:check": "prettier -c ."
+  },
+  "dependencies": {
+    "apify": "^3.5.3",
+    "crawlee": "^3.16.0",
+    "playwright": "^1.58.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.0",
+    "globals": "^17.3.0",
+    "prettier": "^3.8.1"
+  }
+}
