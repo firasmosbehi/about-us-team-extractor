@@ -3,7 +3,7 @@ import { PlaywrightCrawler, log } from 'crawlee';
 
 import { extractEmailsFromMailtoHrefs, extractEmailsFromStrings, extractPeopleFromCards, extractPeopleFromJsonLdStrings } from './lib/extract.js';
 import { buildFallbackCandidates, rankTeamPageCandidates } from './lib/navigation.js';
-import { stripWww, toStartUrl } from './lib/url.js';
+import { getHomepageVariants, stripWww, toStartUrl } from './lib/url.js';
 
 function mergePeopleByNameTitle(people) {
   const map = new Map();
@@ -52,15 +52,18 @@ for (const rawUrl of startUrls.slice(0, maxCompanies)) {
   const u = new URL(rawUrl);
   const companyUrl = `${u.origin}/`;
   const companyDomain = stripWww(u.hostname);
+  const homeVariants = getHomepageVariants(rawUrl);
 
   await requestQueue.addRequest({
-    url: rawUrl,
-    userData: { label: 'HOME', companyUrl, companyDomain }
+    url: homeVariants[0],
+    uniqueKey: `${companyDomain}::HOME::${homeVariants[0]}`,
+    userData: { label: 'HOME', companyUrl, companyDomain, homeVariants, homeVariantIndex: 0 }
   });
 }
 
 const pushedPeopleKeys = new Set();
 const pushedEmailKeys = new Set();
+const satisfiedCompanies = new Set();
 
 const crawler = new PlaywrightCrawler({
   requestQueue,
@@ -80,6 +83,15 @@ const crawler = new PlaywrightCrawler({
 
     if (label === 'HOME') {
       const loadedUrl = request.loadedUrl || request.url;
+      let effectiveCompanyUrl = companyUrl || loadedUrl;
+      let effectiveCompanyDomain = companyDomain;
+      try {
+        const u = new URL(loadedUrl);
+        effectiveCompanyUrl = `${u.origin}/`;
+        effectiveCompanyDomain = stripWww(u.hostname);
+      } catch {
+        // ignore
+      }
 
       const anchors = await page.$$eval('a[href]', (as) =>
         as
@@ -92,12 +104,12 @@ const crawler = new PlaywrightCrawler({
 
       const ranked = rankTeamPageCandidates({
         anchors,
-        baseUrl: companyUrl || loadedUrl,
+        baseUrl: effectiveCompanyUrl,
         maxCandidates: maxTeamPageCandidates
       });
 
       const fallback = buildFallbackCandidates({
-        baseUrl: companyUrl || loadedUrl,
+        baseUrl: effectiveCompanyUrl,
         maxCandidates: maxTeamPageCandidates
       });
 
@@ -113,8 +125,8 @@ const crawler = new PlaywrightCrawler({
 
       if (candidates.length === 0) {
         await Actor.pushData({
-          companyDomain,
-          companyUrl,
+          companyDomain: effectiveCompanyDomain,
+          companyUrl: effectiveCompanyUrl,
           sourceUrl: loadedUrl,
           name: null,
           title: null,
@@ -129,11 +141,11 @@ const crawler = new PlaywrightCrawler({
       for (const c of candidates) {
         await requestQueue.addRequest({
           url: c.url,
-          uniqueKey: `${companyDomain || ''}::${c.url}`,
+          uniqueKey: `${effectiveCompanyDomain || ''}::TEAM::${c.url}`,
           userData: {
             label: 'TEAM',
-            companyDomain,
-            companyUrl,
+            companyDomain: effectiveCompanyDomain,
+            companyUrl: effectiveCompanyUrl,
             discoveredFrom: loadedUrl,
             discoveryScore: c.score,
             discoveryText: c.text
@@ -141,11 +153,18 @@ const crawler = new PlaywrightCrawler({
         });
       }
 
-      log.info(`Queued ${candidates.length} team page candidate(s) for ${companyDomain || loadedUrl}`);
+      log.info(
+        `Queued ${candidates.length} team page candidate(s) for ${effectiveCompanyDomain || loadedUrl}`,
+      );
       return;
     }
 
     if (label === 'TEAM') {
+      if (companyDomain && satisfiedCompanies.has(companyDomain)) {
+        log.debug(`Skipping team candidate for ${companyDomain} (already satisfied): ${request.url}`);
+        return;
+      }
+
       const sourceUrl = request.loadedUrl || request.url;
       const extractedAt = new Date().toISOString();
 
@@ -173,6 +192,7 @@ const crawler = new PlaywrightCrawler({
       ]).filter((p) => shouldIncludeByRole(p.title, roleIncludeKeywords));
 
       if (people.length > 0) {
+        if (companyDomain) satisfiedCompanies.add(companyDomain);
         for (const p of people) {
           const key = `${companyDomain || ''}|${p.name}|${p.title || ''}|${p.email || ''}`.toLowerCase();
           if (pushedPeopleKeys.has(key)) continue;
@@ -202,6 +222,7 @@ const crawler = new PlaywrightCrawler({
 
       // No people detected. Still output page-level emails as leads.
       if (emails.length > 0 && roleIncludeKeywords.length === 0) {
+        if (companyDomain) satisfiedCompanies.add(companyDomain);
         for (const e of emails) {
           const key = `${companyDomain || ''}|${e}`.toLowerCase();
           if (pushedEmailKeys.has(key)) continue;
@@ -240,6 +261,25 @@ const crawler = new PlaywrightCrawler({
   },
   async failedRequestHandler({ request, error }) {
     const label = request.userData?.label || 'UNKNOWN';
+
+    if (label === 'HOME') {
+      const variants = request.userData?.homeVariants;
+      const idx = Number(request.userData?.homeVariantIndex) || 0;
+      const nextIdx = idx + 1;
+
+      if (Array.isArray(variants) && nextIdx < variants.length) {
+        const nextUrl = variants[nextIdx];
+        await requestQueue.addRequest({
+          url: nextUrl,
+          uniqueKey: `${request.userData?.companyDomain || ''}::HOME::${nextUrl}`,
+          forefront: true,
+          userData: { ...request.userData, homeVariantIndex: nextIdx }
+        });
+        log.warning(`HOME failed; retrying variant ${nextIdx + 1}/${variants.length}: ${nextUrl}`);
+        return;
+      }
+    }
+
     await Actor.pushData({
       companyDomain: request.userData?.companyDomain || null,
       companyUrl: request.userData?.companyUrl || null,
@@ -256,4 +296,3 @@ const crawler = new PlaywrightCrawler({
 
 await crawler.run();
 await Actor.exit();
-
