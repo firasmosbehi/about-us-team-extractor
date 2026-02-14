@@ -50,6 +50,20 @@
       "description": "Apify Proxy configuration (recommended for reliability).",
       "editor": "proxy"
     },
+    "tryExpandMenus": {
+      "title": "Try expand menus",
+      "type": "boolean",
+      "description": "Best-effort attempt to open hamburger/menu navigation on the homepage before ranking links.",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "useSitemapFallback": {
+      "title": "Use sitemap fallback",
+      "type": "boolean",
+      "description": "If homepage discovery yields too few candidates, try robots.txt + sitemap.xml to find team/about URLs.",
+      "default": true,
+      "editor": "checkbox"
+    },
     "debugLog": {
       "title": "Debug logging",
       "type": "boolean",

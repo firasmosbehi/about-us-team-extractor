@@ -1,8 +1,17 @@
 import { Actor } from 'apify';
 import { PlaywrightCrawler, log } from 'crawlee';
 
-import { extractEmailsFromMailtoHrefs, extractEmailsFromStrings, extractPeopleFromCards, extractPeopleFromJsonLdStrings } from './lib/extract.js';
+import {
+  extractCloudflareEmailsFromHtml,
+  extractEmailsFromMailtoHrefs,
+  extractEmailsFromStrings,
+  extractObfuscatedEmailsFromText,
+  extractPeopleFromCards,
+  extractPeopleFromJsonLdStrings
+} from './lib/extract.js';
 import { buildFallbackCandidates, rankTeamPageCandidates } from './lib/navigation.js';
+import { collectAnchors, mergeAnchors, tryExpandNavigation } from './lib/browser.js';
+import { discoverTeamUrlsFromSitemaps } from './lib/sitemap.js';
 import { getHomepageVariants, stripWww, toStartUrl } from './lib/url.js';
 
 function mergePeopleByNameTitle(people) {
@@ -41,6 +50,8 @@ if (startUrls.length === 0) throw new Error('Input "startUrls" is required.');
 const maxCompanies = Math.min(Number(input.maxCompanies) || startUrls.length, startUrls.length);
 const maxTeamPageCandidates = Number(input.maxTeamPageCandidates) || 3;
 const maxConcurrency = Number(input.maxConcurrency) || 5;
+const tryExpandMenus = input.tryExpandMenus ?? true;
+const useSitemapFallback = input.useSitemapFallback ?? true;
 const roleIncludeKeywords = (input.roleIncludeKeywords || [])
   .map((s) => String(s || '').trim().toLowerCase())
   .filter(Boolean);
@@ -93,20 +104,25 @@ const crawler = new PlaywrightCrawler({
         // ignore
       }
 
-      const anchors = await page.$$eval('a[href]', (as) =>
-        as
-          .map((a) => ({
-            href: a.href,
-            text: a.innerText || a.textContent || ''
-          }))
-          .filter((a) => a.href),
-      );
-
-      const ranked = rankTeamPageCandidates({
-        anchors,
+      let anchors = await collectAnchors(page);
+      let ranked = rankTeamPageCandidates({
+        anchors: anchors,
         baseUrl: effectiveCompanyUrl,
         maxCandidates: maxTeamPageCandidates
       });
+
+      if (tryExpandMenus && ranked.length === 0) {
+        const opened = await tryExpandNavigation(page);
+        if (opened) {
+          const anchorsAfter = await collectAnchors(page);
+          anchors = mergeAnchors(anchors, anchorsAfter);
+          ranked = rankTeamPageCandidates({
+            anchors: anchors,
+            baseUrl: effectiveCompanyUrl,
+            maxCandidates: maxTeamPageCandidates
+          });
+        }
+      }
 
       const fallback = buildFallbackCandidates({
         baseUrl: effectiveCompanyUrl,
@@ -121,6 +137,32 @@ const crawler = new PlaywrightCrawler({
         seen.add(c.url);
         candidates.push(c);
         if (candidates.length >= maxTeamPageCandidates) break;
+      }
+
+      if (useSitemapFallback && candidates.length < maxTeamPageCandidates) {
+        try {
+          const sitemapUrls = await discoverTeamUrlsFromSitemaps({
+            companyUrl: effectiveCompanyUrl,
+            companyDomain: effectiveCompanyDomain,
+            maxSitemapsToFetch: 2
+          });
+
+          const sitemapRanked = rankTeamPageCandidates({
+            anchors: sitemapUrls.map((url) => ({ href: url, text: 'sitemap' })),
+            baseUrl: effectiveCompanyUrl,
+            maxCandidates: maxTeamPageCandidates
+          });
+
+          for (const c of sitemapRanked) {
+            if (!c?.url) continue;
+            if (seen.has(c.url)) continue;
+            seen.add(c.url);
+            candidates.push(c);
+            if (candidates.length >= maxTeamPageCandidates) break;
+          }
+        } catch (e) {
+          log.debug(`Sitemap fallback failed for ${effectiveCompanyDomain}: ${e?.message || String(e)}`);
+        }
       }
 
       if (candidates.length === 0) {
@@ -180,6 +222,8 @@ const crawler = new PlaywrightCrawler({
       const emails = Array.from(
         new Set([
           ...extractEmailsFromMailtoHrefs(mailtoHrefs),
+          ...extractCloudflareEmailsFromHtml(html),
+          ...extractObfuscatedEmailsFromText(bodyText),
           ...extractEmailsFromStrings([html, bodyText])
         ]),
       )

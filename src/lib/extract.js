@@ -1,4 +1,5 @@
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+const EMAIL_VALIDATE_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 function normalizeEmail(email) {
   return String(email || '')
@@ -18,6 +19,63 @@ export function extractEmailsFromStrings(strings) {
       if (e) out.add(e);
     }
   }
+  return Array.from(out).sort();
+}
+
+function decodeCloudflareEmailHex(hex) {
+  const h = String(hex || '').trim();
+  if (!/^[0-9a-fA-F]+$/.test(h) || h.length < 4) return null;
+  const key = parseInt(h.slice(0, 2), 16);
+  if (Number.isNaN(key)) return null;
+
+  let out = '';
+  for (let i = 2; i < h.length; i += 2) {
+    const byte = parseInt(h.slice(i, i + 2), 16);
+    if (Number.isNaN(byte)) return null;
+    out += String.fromCharCode(byte ^ key);
+  }
+  return out || null;
+}
+
+export function extractCloudflareEmailsFromHtml(html) {
+  const out = new Set();
+  const s = String(html || '');
+
+  const patterns = [
+    /data-cfemail="([0-9a-fA-F]+)"/g,
+    /\/cdn-cgi\/l\/email-protection#([0-9a-fA-F]+)/g
+  ];
+
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      const decoded = decodeCloudflareEmailHex(m[1]);
+      const normalized = decoded ? normalizeEmail(decoded) : null;
+      if (normalized && EMAIL_VALIDATE_REGEX.test(normalized)) out.add(normalized);
+    }
+  }
+
+  return Array.from(out).sort();
+}
+
+export function extractObfuscatedEmailsFromText(text) {
+  const out = new Set();
+  const s = String(text || '');
+
+  // Pull likely email-ish snippets containing " at " and " dot " with optional brackets.
+  const re =
+    /[a-zA-Z0-9._%+-]+\s*(?:\(|\[|\{)?\s*at\s*(?:\)|\]|\})?\s*[a-zA-Z0-9.-]+\s*(?:\(|\[|\{)?\s*dot\s*(?:\)|\]|\})?\s*[a-zA-Z]{2,}(?:\s*(?:\(|\[|\{)?\s*dot\s*(?:\)|\]|\})?\s*[a-zA-Z]{2,})*/gi;
+
+  const matches = s.match(re) || [];
+  for (const raw of matches) {
+    let candidate = String(raw);
+    candidate = candidate.replace(/\s*(?:\(|\[|\{)?\s*at\s*(?:\)|\]|\})?\s*/gi, '@');
+    candidate = candidate.replace(/\s*(?:\(|\[|\{)?\s*dot\s*(?:\)|\]|\})?\s*/gi, '.');
+    candidate = candidate.replace(/\s+/g, '');
+
+    for (const e of extractEmailsFromStrings([candidate])) out.add(e);
+  }
+
   return Array.from(out).sort();
 }
 
