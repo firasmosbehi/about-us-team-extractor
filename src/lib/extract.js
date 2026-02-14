@@ -9,6 +9,34 @@ function normalizeEmail(email) {
     .toLowerCase();
 }
 
+function normalizeUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+function pickLinkedinUrl(urls) {
+  for (const u of urls || []) {
+    const url = String(u || '').trim();
+    if (!url) continue;
+    const lower = url.toLowerCase();
+    if (lower.includes('linkedin.com/in/')) return url;
+  }
+  for (const u of urls || []) {
+    const url = String(u || '').trim();
+    if (!url) continue;
+    const lower = url.toLowerCase();
+    if (lower.includes('linkedin.com/')) return url;
+  }
+  return null;
+}
+
 export function extractEmailsFromStrings(strings) {
   const out = new Set();
   for (const s of strings || []) {
@@ -127,12 +155,20 @@ function walkJsonLd(node, results) {
     const name = getNameFromPerson(node);
     const title = typeof node.jobTitle === 'string' ? node.jobTitle.trim() : null;
     const email = typeof node.email === 'string' ? normalizeEmail(node.email) : null;
+    const url = typeof node.url === 'string' ? normalizeUrl(node.url) : null;
+    const sameAsUrls = asArray(node.sameAs)
+      .filter((u) => typeof u === 'string')
+      .map(normalizeUrl)
+      .filter(Boolean);
+    const linkedinUrl = pickLinkedinUrl([url, ...sameAsUrls]);
 
     if (name) {
       results.push({
         name,
         title: title || null,
         email: email || null,
+        profileUrl: url || null,
+        linkedinUrl: linkedinUrl || null,
         source: 'jsonld'
       });
     }
@@ -162,6 +198,8 @@ export function dedupePeople(people) {
     const name = typeof p?.name === 'string' ? p.name.trim() : '';
     const title = typeof p?.title === 'string' ? p.title.trim() : '';
     const email = typeof p?.email === 'string' ? normalizeEmail(p.email) : '';
+    const profileUrl = typeof p?.profileUrl === 'string' ? p.profileUrl.trim() : '';
+    const linkedinUrl = typeof p?.linkedinUrl === 'string' ? p.linkedinUrl.trim() : '';
     if (!name) continue;
 
     const key = `${name.toLowerCase()}|${title.toLowerCase()}|${email}`;
@@ -171,6 +209,8 @@ export function dedupePeople(people) {
       name,
       title: title || null,
       email: email || null,
+      profileUrl: profileUrl || null,
+      linkedinUrl: linkedinUrl || null,
       source: p.source || null
     });
   }
@@ -254,6 +294,16 @@ export async function extractPeopleFromCards(page) {
         }
       };
 
+      const isSkippableHref = (href) => {
+        const h = String(href || '').trim().toLowerCase();
+        if (!h) return true;
+        if (h.startsWith('#')) return true;
+        if (h.startsWith('mailto:')) return true;
+        if (h.startsWith('tel:')) return true;
+        if (h.startsWith('javascript:')) return true;
+        return false;
+      };
+
       const selectors = [
         '[class*="team"] [class*="member"]',
         '[class*="team"] [class*="person"]',
@@ -322,7 +372,49 @@ export async function extractPeopleFromCards(page) {
           const mailto = el.querySelector('a[href^="mailto:"]');
           const email = mailto ? parseMailto(mailto.getAttribute('href')) : null;
 
-          out.push({ name, title: title || null, email: email || null, source: 'cards' });
+          const hrefs = Array.from(el.querySelectorAll('a[href]')).map(
+            (a) => a.getAttribute('href') || a.href || '',
+          );
+          const urls = hrefs
+            .filter((h) => !isSkippableHref(h))
+            .map((h) => {
+              try {
+                const u = new URL(h, location.href);
+                u.hash = '';
+                return u.toString();
+              } catch {
+                return null;
+              }
+            })
+            .filter(Boolean);
+
+          const linkedinUrl = urls.find((u) => String(u).toLowerCase().includes('linkedin.com/')) || null;
+
+          let profileUrl = null;
+          for (const u of urls) {
+            try {
+              const parsed = new URL(u);
+              if (parsed.origin !== location.origin) continue;
+              if (!parsed.pathname || parsed.pathname === '/') continue;
+              // Avoid same-page URLs.
+              const current = new URL(location.href);
+              current.hash = '';
+              if (parsed.toString() === current.toString()) continue;
+              profileUrl = parsed.toString();
+              break;
+            } catch {
+              // ignore
+            }
+          }
+
+          out.push({
+            name,
+            title: title || null,
+            email: email || null,
+            profileUrl,
+            linkedinUrl,
+            source: 'cards'
+          });
         }
       }
 

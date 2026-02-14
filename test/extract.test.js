@@ -23,7 +23,14 @@ test('extractPeopleFromJsonLdStrings finds Person nodes', () => {
       '@context': 'https://schema.org',
       '@graph': [
         { '@type': 'Organization', name: 'Acme' },
-        { '@type': 'Person', name: 'Jane Doe', jobTitle: 'CEO', email: 'jane@acme.com' }
+        {
+          '@type': 'Person',
+          name: 'Jane Doe',
+          jobTitle: 'CEO',
+          email: 'jane@acme.com',
+          url: 'https://acme.com/team/jane-doe',
+          sameAs: ['https://www.linkedin.com/in/jane-doe/']
+        }
       ]
     })
   ]);
@@ -32,6 +39,8 @@ test('extractPeopleFromJsonLdStrings finds Person nodes', () => {
   assert.equal(people[0].name, 'Jane Doe');
   assert.equal(people[0].title, 'CEO');
   assert.equal(people[0].email, 'jane@acme.com');
+  assert.equal(people[0].profileUrl, 'https://acme.com/team/jane-doe');
+  assert.equal(people[0].linkedinUrl, 'https://www.linkedin.com/in/jane-doe/');
 });
 
 test('extractCloudflareEmailsFromHtml decodes data-cfemail', () => {

@@ -42,6 +42,8 @@ Dataset items are one row per person (or per email if no people were detected):
 - `name`
 - `title`
 - `email`
+- `profileUrl`
+- `linkedinUrl`
 - `emailsOnPage`
 - `extractedAt`
 - `notes`

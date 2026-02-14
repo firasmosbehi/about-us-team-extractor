@@ -64,6 +64,50 @@
       "default": true,
       "editor": "checkbox"
     },
+    "useDepth2Discovery": {
+      "title": "Use depth-2 discovery",
+      "type": "boolean",
+      "description": "If we can't find a good Team/Leadership page directly, also try: homepage -> about/company -> team/leadership.",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "maxDiscoveryPagesPerCompany": {
+      "title": "Max discovery pages per company",
+      "type": "integer",
+      "description": "Max number of intermediate About/Company pages to try per company when using depth-2 discovery.",
+      "default": 2,
+      "minimum": 0,
+      "maximum": 10
+    },
+    "useLlm": {
+      "title": "Use LLM fallback (OpenAI)",
+      "type": "boolean",
+      "description": "If enabled, uses OpenAI to extract people when heuristic extraction finds no people on a candidate page.",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "openaiApiKey": {
+      "title": "OpenAI API key",
+      "type": "string",
+      "description": "OpenAI API key. Prefer using Actor secrets in production.",
+      "editor": "textfield",
+      "isSecret": true
+    },
+    "openaiModel": {
+      "title": "OpenAI model",
+      "type": "string",
+      "description": "Model name for the OpenAI call (e.g. gpt-4o-mini).",
+      "editor": "textfield",
+      "default": "gpt-4o-mini"
+    },
+    "llmMaxChars": {
+      "title": "LLM max chars",
+      "type": "integer",
+      "description": "Maximum number of characters of HTML/text sent to the LLM.",
+      "default": 40000,
+      "minimum": 5000,
+      "maximum": 200000
+    },
     "debugLog": {
       "title": "Debug logging",
       "type": "boolean",
